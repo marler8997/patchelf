@@ -108,8 +108,10 @@ private:
 
     typedef std::string SectionName;
     typedef std::map<SectionName, std::string> ReplacedSections;
+    typedef std::map<SectionName, std::string> ReplacedSections;
 
     ReplacedSections replacedSections;
+    std::map<SectionName, std::string> newSections;
 
     std::string sectionNames; /* content of the .shstrtab section */
 
@@ -174,6 +176,9 @@ private:
     std::string & replaceSection(const SectionName & sectionName,
         unsigned int size);
 
+    std::string & addSection(const SectionName & sectionName,
+        unsigned int size);
+
     bool haveReplacedSection(const SectionName & sectionName);
 
     void writeReplacedSections(Elf_Off & curOff,
@@ -196,6 +201,8 @@ public:
     void modifySoname(sonameMode op, const std::string & newSoname);
 
     void setInterpreter(const std::string & newInterpreter);
+
+    void addSection(const std::string & name, const std::string & data);
 
     typedef enum { rpPrint, rpShrink, rpSet, rpRemove } RPathOp;
 
@@ -629,6 +636,13 @@ std::string & ElfFile<ElfFileParamNames>::replaceSection(const SectionName & sec
     replacedSections[sectionName] = s;
 
     return replacedSections[sectionName];
+}
+
+template<ElfFileParams>
+void ElfFile<ElfFileParamNames>::addSection(const std::string & name, const std::string & data)
+{
+    replacedSections[name] = data;
+    changed = true;
 }
 
 
@@ -1122,7 +1136,6 @@ void ElfFile<ElfFileParamNames>::setInterpreter(const std::string & newInterpret
     changed = true;
 }
 
-
 static void concatToRPath(std::string & rpath, const std::string & path)
 {
     if (!rpath.empty()) rpath += ":";
@@ -1565,6 +1578,8 @@ static std::map<std::string, std::string> neededLibsToReplace;
 static std::set<std::string> neededLibsToAdd;
 static bool printNeeded = false;
 static bool noDefaultLib = false;
+static std::string newSection;
+static std::string newSectionData;
 
 template<class ElfFile>
 static void patchElf2(ElfFile && elfFile, std::string fileName)
@@ -1599,6 +1614,9 @@ static void patchElf2(ElfFile && elfFile, std::string fileName)
 
     if (noDefaultLib)
         elfFile.noDefaultLib();
+
+    if (newSection != "")
+        elfFile.addSection(newSection, newSectionData);
 
     if (elfFile.isChanged()){
         elfFile.rewriteSections();
@@ -1644,6 +1662,7 @@ void showHelp(const std::string & progName)
   [--replace-needed LIBRARY NEW_LIBRARY]\n\
   [--print-needed]\n\
   [--no-default-lib]\n\
+  [--add-section name data]\n\
   [--debug]\n\
   [--version]\n\
   FILENAME\n", progName.c_str());
@@ -1743,6 +1762,12 @@ int mainWrapped(int argc, char * * argv)
         else if (arg == "--version") {
             printf(PACKAGE_STRING "\n");
             return 0;
+        }
+        else if (arg == "--add-section") {
+            if (++i == argc) error("missing argument");
+            newSection = argv[i];
+            if (++i == argc) error("missing argument");
+            newSectionData = argv[i];
         }
         else {
             fileNames.push_back(arg);
